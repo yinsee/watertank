@@ -4,18 +4,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3-Tank Mixer Simulator</title>
+    <title>3-Tank Mixer Simulator (3D)</title>
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <!-- Custom CSS -->
     <link rel="stylesheet" href="style.css">
+
+    <!-- Three.js Import Map -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <style>
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            background: linear-gradient(to bottom, #e0eafc, #cfdef3);
+        }
+
+        /* Make UI elements float above */
+        .fixed-controls,
+        .fixed-alert-container,
+        .level-readout {
+            z-index: 1000;
+        }
+
+        .level-readout {
+            position: absolute;
+            color: #333;
+            font-family: monospace;
+            font-weight: bold;
+            font-size: 1.2rem;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 2px 5px;
+            border-radius: 4px;
+            pointer-events: none;
+        }
+
+        /* Hide original 2D visuals but keep structure for Alpine logic if needed */
+        .tank-wrapper,
+        .pipes-container,
+        .turbine-container,
+        .main-tank-container,
+        .tank-pipe-out,
+        .pipe-turbine-out,
+        .row {
+            display: none !important;
+        }
+
+        /* Re-enable row for layout if needed, but we are using absolute 3D now.
+           Actually, we just need the overlay controls.
+        */
+
+        body {
+            overflow: hidden;
+            /* Prevent scrollbars */
+            background: transparent;
+        }
+    </style>
 </head>
 
-<body class="container">
+<body class="container-fluid p-0">
+
+    <!-- 3D Canvas -->
+    <div id="canvas-container"></div>
 
     <div x-data="tankApp()" class="pt-2 pb-4">
         <!-- Fixed Controls -->
@@ -57,82 +123,469 @@
             </div>
         </div>
 
-        <!-- Tanks Row -->
-        <div class="row justify-content-center mb-0">
-            <template x-for="(tank, index) in tanks" :key="tank.id">
-                <div class="col-3 tank-wrapper">
-                    <!-- Level Indicator (Moved to Top) -->
-                    <div class="level-indicator mb-1" :class="{'text-danger': tank.level < 3 && isRunning, 'text-dark': !(tank.level < 3 && isRunning)}" x-text="tank.level.toFixed(1) + 'L'">
-                    </div>
-
-                    <!-- Tank Visual -->
-                    <div class="tank-container" :class="{'warning-flash': tank.level < 3 && isRunning}">
-                        <div class="tank-content" :style="`height: ${(tank.level / 10) * 100}%; background: linear-gradient(to bottom, ${tank.color}, ${tank.colorDark});`">
-                            <!-- Bubbles -->
-                            <template x-if="tank.level > 0">
-                                <div>
-                                    <div class="bubble"></div>
-                                    <div class="bubble"></div>
-                                    <div class="bubble"></div>
-                                    <div class="bubble"></div>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-
-                    <!-- Vertical Pipe Out (Attached to tank for alignment) -->
-                    <div class="tank-pipe-out pipe-common" :style="isRunning ? `background-color: ${tank.color}` : ''">
-                    </div>
-
-                    <!-- Removed Level Indicator from Bottom -->
-                </div>
-            </template>
-        </div>
-
-        <!-- Pipes Connection Visualization -->
-        <div class="row justify-content-center">
-            <div class="col-9 pipes-container">
-                <!-- Horizontal Pipe connecting them -->
-                <div class="pipe-horizontal pipe-common" :style="isRunning ? 'background: linear-gradient(to right, ' + tanks[0].color + ', ' + tanks[1].color + ', ' + tanks[2].color + ')' : ''" :class="{'pipe-active': isRunning}"></div>
-
-                <!-- Down to turbine -->
-                <div class="pipe-to-turbine pipe-common" :style="isRunning ? 'background: linear-gradient(to bottom, ' + tanks[1].color + ', #6f42c1)' : ''" :class="{'pipe-active': isRunning}"></div>
-            </div>
-        </div>
-
-        <!-- Turbine -->
-        <div class="row justify-content-center mb-0">
-            <div class="col-12 text-center">
-                <div class="turbine-container">
-                    <i class="bi bi-fan turbine-blades" :class="{'spinning': isRunning}"></i>
-                </div>
-                <!-- Pipe from turbine to main tank -->
-                <!-- Explicitly binding class and style for running state -->
-                <div class="pipe-turbine-out" :class="{'pipe-active': isRunning}" :style="isRunning ? 'background: linear-gradient(to bottom, #6f42c1, #0d6efd)' : ''"></div>
-            </div>
-        </div>
-
-        <!-- Main Mixing Tank -->
-        <div class="row justify-content-center">
-            <div class="col-12 text-center">
-                <div class="main-tank-container">
-                    <div class="main-tank-content" :style="`height: ${(mixedLevel / 30) * 100}%;`">
-                        <!-- Bubbles for main tank -->
-                        <template x-if="mixedLevel > 0">
-                            <div>
-                                <div class="bubble"></div>
-                                <div class="bubble"></div>
-                                <div class="bubble"></div>
-                                <div class="bubble"></div>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-                <div class="mt-2 fw-bold">Mixed Output: <span x-text="mixedLevel.toFixed(1)"></span>L</div>
-            </div>
-        </div>
-
+        <!-- Hidden Data Elements to Bridge Alpine -> Three.js -->
+        <!-- We will access the Alpine scope directly from JS instead of using DOM elements -->
     </div>
+
+    <!-- 3D Logic -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Configuration ---
+        const CONFIG = {
+            tankRadius: 10,
+            tankHeight: 40,
+            tankSpacing: 35,
+            mainTankRadius: 20,
+            mainTankHeight: 30,
+            pipeRadius: 1,
+            colors: [
+                { top: 0xdc3545, bottom: 0xb02a37 }, // Red
+                { top: 0xffc107, bottom: 0xd39e00 }, // Yellow
+                { top: 0x0d6efd, bottom: 0x0a58ca }  // Blue
+            ]
+        };
+
+        // --- Scene Setup ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        // scene.background = new THREE.Color(0xf8f9fa); // Match body bg
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(50, -50, 150); // Angled view looking down
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.target.set(0, -10, 0);
+
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(50, 50, 50);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        const backLight = new THREE.DirectionalLight(0xffffff, 0.3);
+        backLight.position.set(-50, 20, -50);
+        scene.add(backLight);
+
+        // --- Materials ---
+        const glassMaterial = new THREE.MeshPhysicalMaterial({
+            color: 0xffffff,
+            metalness: 0.0,
+            roughness: 0.0,
+            transparent: true,
+            opacity: 0.2,
+            depthWrite: false, // Allow seeing objects inside
+            side: THREE.DoubleSide
+        });
+
+        const pipeMaterial = new THREE.MeshStandardMaterial({
+            color: 0xdee2e6,
+            roughness: 0.4,
+            metalness: 0.3
+        });
+
+        const pipeActiveMaterial = new THREE.MeshStandardMaterial({
+            color: 0x495057,
+            roughness: 0.4,
+            metalness: 0.3
+        });
+
+        // --- Objects Storage ---
+        const tanks = [];
+        const pipes = [];
+        let turbine;
+        let mainTankLiquid;
+        const bubbles = [];
+
+        // --- Helper: Create Cylinder with Gradient ---
+        function createLiquid(radius, height, colorTop, colorBottom) {
+            const geometry = new THREE.CylinderGeometry(radius - 0.5, radius - 0.5, height, 32, 1, true);
+            // Move pivot to bottom
+            geometry.translate(0, height / 2, 0);
+
+            // Vertex Colors for Gradient
+            const count = geometry.attributes.position.count;
+            const colors = new Float32Array(count * 3);
+            const cTop = new THREE.Color(colorTop);
+            const cBot = new THREE.Color(colorBottom);
+
+            for (let i = 0; i < count; i++) {
+                const y = geometry.attributes.position.getY(i);
+                // Normalized height is roughly 0 to height
+                // But we translated it. Original cylinder is centered at 0, from -h/2 to h/2.
+                // We translated by h/2, so it's 0 to h.
+                const t = y / height;
+                if (t > 0.5) {
+                    colors[i * 3] = cTop.r;
+                    colors[i * 3 + 1] = cTop.g;
+                    colors[i * 3 + 2] = cTop.b;
+                } else {
+                    colors[i * 3] = cBot.r;
+                    colors[i * 3 + 1] = cBot.g;
+                    colors[i * 3 + 2] = cBot.b;
+                }
+            }
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const material = new THREE.MeshBasicMaterial({
+                vertexColors: true,
+                transparent: true, // Transparent to see bubbles
+                opacity: 0.8,      // 80% opacity
+                side: THREE.DoubleSide
+            });
+
+            const mesh = new THREE.Mesh(geometry, material);
+            return mesh;
+        }
+
+        // --- Build Scene ---
+
+        // 1. Top Tanks
+        [-1, 0, 1].forEach((pos, index) => {
+            const x = pos * CONFIG.tankSpacing;
+            const y = 20;
+
+            // Glass Container
+            const geometry = new THREE.CylinderGeometry(CONFIG.tankRadius, CONFIG.tankRadius, CONFIG.tankHeight, 32);
+            // Open top?
+            const containerMesh = new THREE.Mesh(geometry, glassMaterial);
+            containerMesh.position.set(x, y, 0);
+            scene.add(containerMesh);
+
+            // Liquid
+            const liquid = createLiquid(CONFIG.tankRadius, CONFIG.tankHeight, CONFIG.colors[index].top, CONFIG.colors[index].bottom);
+            // Position at bottom of tank
+            liquid.position.y = -CONFIG.tankHeight / 2;
+            containerMesh.add(liquid);
+
+            // Cap for liquid
+            const capGeo = new THREE.CircleGeometry(CONFIG.tankRadius - 0.5, 32);
+            const capMat = new THREE.MeshBasicMaterial({ color: CONFIG.colors[index].top });
+            const cap = new THREE.Mesh(capGeo, capMat);
+            cap.rotation.x = -Math.PI / 2;
+            cap.position.y = CONFIG.tankHeight; // Will be scaled
+            liquid.add(cap);
+
+            // Text Label (Level)
+            const div = document.createElement('div');
+            div.className = 'level-readout';
+            div.textContent = '10.0L';
+            document.body.appendChild(div);
+
+            tanks.push({
+                mesh: containerMesh,
+                liquid: liquid,
+                cap: cap,
+                label: div,
+                bubbles: [],
+                color: CONFIG.colors[index].top
+            });
+
+            // Bubbles
+            for (let b = 0; b < 5; b++) {
+                const bubbleGeo = new THREE.SphereGeometry(0.5 + Math.random() * 0.5, 8, 8);
+                const bubbleMat = new THREE.MeshBasicMaterial({ color: 0xffffff }); // Opaque white
+                const bubble = new THREE.Mesh(bubbleGeo, bubbleMat);
+                liquid.add(bubble);
+                tanks[index].bubbles.push({
+                    mesh: bubble,
+                    speed: 0.1 + Math.random() * 0.2,
+                    offset: Math.random() * Math.PI * 2,
+                    active: false
+                });
+            }
+
+            // Pipe Out (Vertical)
+            const pipeGeo = new THREE.CylinderGeometry(CONFIG.pipeRadius, CONFIG.pipeRadius, 10, 16);
+            const pipe = new THREE.Mesh(pipeGeo, pipeMaterial);
+            pipe.position.set(x, y - CONFIG.tankHeight / 2 - 5, 0);
+            scene.add(pipe);
+            pipes.push(pipe);
+        });
+
+        // 2. Horizontal Pipe
+        const hPipeLen = CONFIG.tankSpacing * 2;
+        const hPipeGeo = new THREE.CylinderGeometry(CONFIG.pipeRadius, CONFIG.pipeRadius, hPipeLen, 16);
+        hPipeGeo.rotateZ(Math.PI / 2);
+        const hPipe = new THREE.Mesh(hPipeGeo, pipeMaterial);
+        hPipe.position.set(0, 20 - CONFIG.tankHeight / 2 - 10, 0);
+        scene.add(hPipe);
+
+        // 3. Down Pipe to Turbine
+        const dPipeGeo = new THREE.CylinderGeometry(CONFIG.pipeRadius, CONFIG.pipeRadius, 15, 16);
+        const dPipe = new THREE.Mesh(dPipeGeo, pipeMaterial);
+        dPipe.position.set(0, 20 - CONFIG.tankHeight / 2 - 10 - 7.5, 0);
+        scene.add(dPipe);
+
+        // 4. Turbine
+        const turbineGroup = new THREE.Group();
+        turbineGroup.position.set(0, -15, 0);
+        scene.add(turbineGroup);
+
+        // Turbine Housing
+        const housingGeo = new THREE.CylinderGeometry(5, 5, 2, 32);
+        housingGeo.rotateX(Math.PI / 2);
+        const housing = new THREE.Mesh(housingGeo, new THREE.MeshStandardMaterial({ color: 0x6c757d }));
+        turbineGroup.add(housing);
+
+        // Blades
+        const bladeGeo = new THREE.BoxGeometry(1, 8, 0.5);
+        const blade1 = new THREE.Mesh(bladeGeo, new THREE.MeshStandardMaterial({ color: 0x333333 }));
+        const blade2 = blade1.clone();
+        blade2.rotation.z = Math.PI / 2;
+        const rotor = new THREE.Group();
+        rotor.add(blade1);
+        rotor.add(blade2);
+        rotor.position.z = 1.2;
+        turbineGroup.add(rotor);
+        turbine = rotor;
+
+        // 5. Pipe to Main Tank
+        const dPipe2Geo = new THREE.CylinderGeometry(CONFIG.pipeRadius, CONFIG.pipeRadius, 10, 16);
+        const dPipe2 = new THREE.Mesh(dPipe2Geo, pipeMaterial);
+        dPipe2.position.set(0, -22, 0);
+        scene.add(dPipe2);
+
+        // 6. Main Tank
+        const mainTankY = -40;
+        const mainGeo = new THREE.CylinderGeometry(CONFIG.mainTankRadius, CONFIG.mainTankRadius, CONFIG.mainTankHeight, 32);
+        const mainTank = new THREE.Mesh(mainGeo, glassMaterial);
+        mainTank.position.set(0, mainTankY, 0);
+        scene.add(mainTank);
+
+        // Main Liquid (Rainbow Gradient)
+        // Custom Shader for 3-color gradient (Red-Green-Blue horizontally as per CSS)
+        // CSS: linear-gradient(to right, red, green, blue)
+        // In Cylinder (radial), "to right" maps to angle around Y axis.
+        const vertexShader = `
+            varying vec2 vUv;
+            varying vec3 vPos;
+            void main() {
+                vUv = uv;
+                vPos = position;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
+        const fragmentShader = `
+            varying vec2 vUv;
+            varying vec3 vPos;
+            void main() {
+                // Map x position to gradient
+                // Cylinder local coords: x from -radius to radius
+                float t = (vPos.x + 20.0) / 40.0; // Approximation
+
+                vec3 c1 = vec3(1.0, 0.0, 0.0); // Red
+                vec3 c2 = vec3(0.0, 1.0, 0.0); // Green
+                vec3 c3 = vec3(0.0, 0.0, 1.0); // Blue
+
+                vec3 color;
+                if (t < 0.5) {
+                    color = mix(c1, c2, t * 2.0);
+                } else {
+                    color = mix(c2, c3, (t - 0.5) * 2.0);
+                }
+
+                gl_FragColor = vec4(color, 0.8);
+            }
+        `;
+
+        // Simpler approach: Vertical gradient matching the mix, or just a uniform color that changes?
+        // The original CSS was "linear-gradient(to right, ...)" on the liquid div.
+        // Let's stick to a simple vertical fill for 3D, but maybe use a custom texture if needed.
+        // For now, let's just make it a mixed purple color or use the shader above.
+        const mainLiquidGeo = new THREE.CylinderGeometry(CONFIG.mainTankRadius - 0.5, CONFIG.mainTankRadius - 0.5, CONFIG.mainTankHeight, 32);
+        mainLiquidGeo.translate(0, CONFIG.mainTankHeight / 2, 0);
+
+        const mainLiquidMat = new THREE.ShaderMaterial({
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
+            transparent: true,
+            side: THREE.DoubleSide
+        });
+
+        mainTankLiquid = new THREE.Mesh(mainLiquidGeo, mainLiquidMat);
+        mainTankLiquid.position.y = -CONFIG.mainTankHeight / 2;
+        mainTank.add(mainTankLiquid);
+
+        // Cap for main liquid
+        const mainCapGeo = new THREE.CircleGeometry(CONFIG.mainTankRadius - 0.5, 32);
+        const mainCapMat = new THREE.MeshBasicMaterial({ color: 0x888888 }); // Generic surface color
+        const mainCap = new THREE.Mesh(mainCapGeo, mainCapMat);
+        mainCap.rotation.x = -Math.PI / 2;
+        mainTankLiquid.add(mainCap);
+
+        // Main Tank Bubbles
+        const mainBubbles = [];
+        for (let b = 0; b < 10; b++) {
+            const bubbleGeo = new THREE.SphereGeometry(0.8, 8, 8);
+            const bubbleMat = new THREE.MeshBasicMaterial({ color: 0xffffff }); // Opaque
+            const bubble = new THREE.Mesh(bubbleGeo, bubbleMat);
+            mainTankLiquid.add(bubble);
+            mainBubbles.push({
+                mesh: bubble,
+                speed: 0.1 + Math.random() * 0.2,
+                offset: Math.random() * Math.PI * 2,
+                active: false
+            });
+        }
+
+        // Main Label
+        const mainLabel = document.createElement('div');
+        mainLabel.className = 'level-readout';
+        mainLabel.textContent = 'Mixed: 0.0L';
+        document.body.appendChild(mainLabel);
+
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+
+            // Sync with Alpine
+            syncWithAlpine();
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Sync Logic ---
+        function syncWithAlpine() {
+            // Access Alpine scope
+            const el = document.querySelector('[x-data]');
+            if (!el || !el._x_dataStack) return;
+            const app = el._x_dataStack[0]; // The tankApp scope
+
+            // Update Top Tanks
+            app.tanks.forEach((tankData, i) => {
+                const tankObj = tanks[i];
+                const levelPct = tankData.level / 10; // 0 to 1
+
+                // Update Liquid Height
+                // Scale Y. If 0, scale 0.001 to avoid matrix errors
+                tankObj.liquid.scale.y = Math.max(0.001, levelPct);
+
+                // Update Cap Position (relative to liquid mesh which is scaled? No, liquid mesh geometry is 0..H)
+                // Actually, if we scale the liquid mesh, children are scaled too.
+                // The cap is a child of the liquid mesh.
+                // If liquid.scale.y = 0.5, the geometry inside is squashed.
+                // The cap is at y = H. So it moves to 0.5*H. Correct.
+                // BUT, the cap itself will be flattened (scale.y inherited).
+                // We need to inverse scale the cap or just put it outside?
+                // Easiest: Cap is child of liquid. liquid.scale.y affects cap position correctly, but squashes it.
+                // Fix: cap.scale.y = 1 / liquid.scale.y
+                if (levelPct > 0.001) {
+                    tankObj.cap.visible = true;
+                    // tankObj.cap.scale.y = 1 / Math.max(0.001, levelPct); // Not needed as scaling is orthogonal
+                } else {
+                    tankObj.cap.visible = false;
+                }
+
+                // Bubbles
+                tankObj.bubbles.forEach((b, idx) => {
+                    if (tankData.level > 0) {
+                        b.mesh.visible = true;
+                        // Animate rise
+                        const time = Date.now() * 0.001;
+                        // Reset if high
+                        let y = ((time * b.speed * 10) + idx * 5) % (CONFIG.tankHeight - 2);
+                        // Map to local coords 0..H
+                        b.mesh.position.y = y;
+                        b.mesh.position.x = Math.sin(time + b.offset) * 2;
+                        b.mesh.position.z = Math.cos(time + b.offset) * 2;
+
+                        // Counter-scale bubble to remain spherical
+                        b.mesh.scale.set(1, 1 / Math.max(0.001, levelPct), 1);
+                    } else {
+                        b.mesh.visible = false;
+                    }
+                });
+
+                // Label Position
+                const pos = new THREE.Vector3();
+                tankObj.mesh.getWorldPosition(pos);
+                pos.y += CONFIG.tankHeight / 2 + 5;
+                pos.project(camera);
+                const x = (pos.x * .5 + .5) * window.innerWidth;
+                const y = (-(pos.y * .5) + .5) * window.innerHeight;
+                tankObj.label.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+                tankObj.label.textContent = tankData.level.toFixed(1) + 'L';
+                if (tankData.level < 3 && app.isRunning) {
+                    tankObj.label.style.color = 'red';
+                    // Blink effect could be added
+                } else {
+                    tankObj.label.style.color = 'black';
+                }
+            });
+
+            // Update Main Tank
+            const mixedPct = app.mixedLevel / 30;
+            mainTankLiquid.scale.y = Math.max(0.001, mixedPct);
+            if (mixedPct > 0.001) {
+                mainCap.visible = true;
+                // mainCap.scale.y = 1 / Math.max(0.001, mixedPct);
+            } else {
+                mainCap.visible = false;
+            }
+
+            // Main Bubbles
+            mainBubbles.forEach((b, idx) => {
+                if (app.mixedLevel > 0) {
+                    b.mesh.visible = true;
+                    const time = Date.now() * 0.001;
+                    let y = ((time * b.speed * 10) + idx * 5) % (CONFIG.mainTankHeight - 2);
+                    b.mesh.position.y = y;
+                    b.mesh.position.x = Math.sin(time + b.offset) * 5;
+                    b.mesh.position.z = Math.cos(time + b.offset) * 5;
+                    b.mesh.scale.set(1, 1 / Math.max(0.001, mixedPct), 1);
+                } else {
+                    b.mesh.visible = false;
+                }
+            });
+
+            // Label
+            const mPos = new THREE.Vector3();
+            mainTank.getWorldPosition(mPos);
+            mPos.y -= CONFIG.mainTankHeight / 2 + 5;
+            mPos.project(camera);
+            const mx = (mPos.x * .5 + .5) * window.innerWidth;
+            const my = (-(mPos.y * .5) + .5) * window.innerHeight;
+            mainLabel.style.transform = `translate(-50%, -50%) translate(${mx}px, ${my}px)`;
+            mainLabel.textContent = 'Mixed: ' + app.mixedLevel.toFixed(1) + 'L';
+
+            // Pipes & Turbine Animation
+            if (app.isRunning) {
+                turbine.rotation.z -= 0.2;
+                // Change pipe colors
+                // Need to traverse scene or keep refs. We have refs.
+                hPipe.material = pipeActiveMaterial;
+                dPipe.material = pipeActiveMaterial;
+                dPipe2.material = pipeActiveMaterial;
+            } else {
+                hPipe.material = pipeMaterial;
+                dPipe.material = pipeMaterial;
+                dPipe2.material = pipeMaterial;
+            }
+        }
+
+        // Handle Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
 
     <script>
         function tankApp() {
@@ -221,11 +674,11 @@
                     this.message = msg;
                     this.messageType = type;
                     // Auto-hide error messages after 3 seconds
-                    if (type === 'error') {
-                        setTimeout(() => {
-                            if (this.message === msg) this.message = '';
-                        }, 3000);
-                    }
+                    // if (type === 'error') {
+                    setTimeout(() => {
+                        if (this.message === msg) this.message = '';
+                    }, 3000);
+                    // }
                 },
 
                 init() {
