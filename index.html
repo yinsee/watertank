@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3-Tank Mixer Simulator</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+
+<body class="container">
+
+    <div x-data="tankApp()" class="pt-2 pb-4">
+        <!-- Fixed Controls -->
+        <div class="fixed-controls">
+            <button @click="startSimulation()" class="btn btn-success round-control-btn" :disabled="isRunning">
+                <i class="bi bi-play-fill"></i>
+                START
+            </button>
+            <button @click="stopSimulation()" class="btn btn-danger round-control-btn" :disabled="!isRunning">
+                <i class="bi bi-stop-fill"></i>
+                STOP
+            </button>
+
+            <hr class="my-2">
+
+            <!-- Fill Buttons in Control Panel -->
+            <div class="d-flex flex-column gap-2 align-items-center">
+                <template x-for="(tank, index) in tanks" :key="tank.id">
+                    <button @click="fillTank(index)" class="btn round-control-btn text-white" :style="`background-color: ${tank.color}; border-color: ${tank.colorDark};`">
+                        <i class="bi bi-plus-lg"></i>
+                        <span style="font-size: 0.7rem;">FILL</span>
+                    </button>
+                </template>
+            </div>
+
+            <hr class="my-2">
+
+            <!-- Flush Button -->
+            <button @click="flushMixed()" class="btn btn-warning round-control-btn text-dark" :disabled="mixedLevel === 0">
+                <i class="bi bi-arrow-counterclockwise"></i>
+                <span style="font-size: 0.7rem;">FLUSH</span>
+            </button>
+        </div>
+
+        <!-- Fixed Bottom Alert Message -->
+        <div class="fixed-alert-container">
+            <div x-show="message" x-transition :class="{'alert-danger': messageType === 'error', 'alert-info': messageType === 'info'}" class="alert fixed-alert text-center py-2" role="alert">
+                <span x-text="message"></span>
+            </div>
+        </div>
+
+        <!-- Tanks Row -->
+        <div class="row justify-content-center mb-0">
+            <template x-for="(tank, index) in tanks" :key="tank.id">
+                <div class="col-3 tank-wrapper">
+                    <!-- Level Indicator (Moved to Top) -->
+                    <div class="level-indicator mb-1" :class="{'text-danger': tank.level < 3 && isRunning, 'text-dark': !(tank.level < 3 && isRunning)}" x-text="tank.level.toFixed(1) + 'L'">
+                    </div>
+
+                    <!-- Tank Visual -->
+                    <div class="tank-container" :class="{'warning-flash': tank.level < 3 && isRunning}">
+                        <div class="tank-content" :style="`height: ${(tank.level / 10) * 100}%; background: linear-gradient(to bottom, ${tank.color}, ${tank.colorDark});`">
+                            <!-- Bubbles -->
+                            <template x-if="tank.level > 0">
+                                <div>
+                                    <div class="bubble"></div>
+                                    <div class="bubble"></div>
+                                    <div class="bubble"></div>
+                                    <div class="bubble"></div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Vertical Pipe Out (Attached to tank for alignment) -->
+                    <div class="tank-pipe-out pipe-common" :style="isRunning ? `background-color: ${tank.color}` : ''">
+                    </div>
+
+                    <!-- Removed Level Indicator from Bottom -->
+                </div>
+            </template>
+        </div>
+
+        <!-- Pipes Connection Visualization -->
+        <div class="row justify-content-center">
+            <div class="col-9 pipes-container">
+                <!-- Horizontal Pipe connecting them -->
+                <div class="pipe-horizontal pipe-common" :style="isRunning ? 'background: linear-gradient(to right, ' + tanks[0].color + ', ' + tanks[1].color + ', ' + tanks[2].color + ')' : ''" :class="{'pipe-active': isRunning}"></div>
+
+                <!-- Down to turbine -->
+                <div class="pipe-to-turbine pipe-common" :style="isRunning ? 'background: linear-gradient(to bottom, ' + tanks[1].color + ', #6f42c1)' : ''" :class="{'pipe-active': isRunning}"></div>
+            </div>
+        </div>
+
+        <!-- Turbine -->
+        <div class="row justify-content-center mb-0">
+            <div class="col-12 text-center">
+                <div class="turbine-container">
+                    <i class="bi bi-fan turbine-blades" :class="{'spinning': isRunning}"></i>
+                </div>
+                <!-- Pipe from turbine to main tank -->
+                <!-- Explicitly binding class and style for running state -->
+                <div class="pipe-turbine-out" :class="{'pipe-active': isRunning}" :style="isRunning ? 'background: linear-gradient(to bottom, #6f42c1, #0d6efd)' : ''"></div>
+            </div>
+        </div>
+
+        <!-- Main Mixing Tank -->
+        <div class="row justify-content-center">
+            <div class="col-12 text-center">
+                <div class="main-tank-container">
+                    <div class="main-tank-content" :style="`height: ${(mixedLevel / 30) * 100}%;`">
+                        <!-- Bubbles for main tank -->
+                        <template x-if="mixedLevel > 0">
+                            <div>
+                                <div class="bubble"></div>
+                                <div class="bubble"></div>
+                                <div class="bubble"></div>
+                                <div class="bubble"></div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <div class="mt-2 fw-bold">Mixed Output: <span x-text="mixedLevel.toFixed(1)"></span>L</div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function tankApp() {
+            return {
+                isRunning: false,
+                interval: null,
+                message: '',
+                messageType: 'info', // 'info' or 'error'
+                mixedLevel: 0,
+
+                tanks: [
+                    { id: 1, color: '#dc3545', colorDark: '#b02a37', level: 10 }, // Red
+                    { id: 2, color: '#ffc107', colorDark: '#d39e00', level: 10 }, // Yellow
+                    { id: 3, color: '#0d6efd', colorDark: '#0a58ca', level: 10 }  // Blue
+                ],
+
+                startSimulation() {
+                    // Pre-condition check: All tanks must be >= 3L
+                    const allReady = this.tanks.every(t => t.level >= 3);
+
+                    if (!allReady) {
+                        this.showMessage("All tanks must be at least 3L to start!", "error");
+                        return;
+                    }
+
+                    this.showMessage("Simulation Started. Turbine spinning...", "info");
+                    this.isRunning = true;
+
+                    this.interval = setInterval(() => {
+                        this.tick();
+                    }, 100); // 100ms tick
+                },
+
+                stopSimulation(reason = "Simulation Stopped.") {
+                    this.isRunning = false;
+                    clearInterval(this.interval);
+                    this.showMessage(reason, "info");
+                },
+
+                fillTank(index) {
+                    // Allow fill at any time? Requirements imply control buttons exist.
+                    // Let's allow filling up to 10L.
+                    if (this.tanks[index].level < 10) {
+                        this.tanks[index].level = Math.min(10, this.tanks[index].level + 1);
+                        // If filling while running, we should check if we recovered from <3L warning
+                        // Alpine reactivity handles the UI update automatically.
+                    }
+                },
+
+                flushMixed() {
+                    this.mixedLevel = 0;
+                    this.showMessage("Mixed tank flushed.", "info");
+                },
+
+                tick() {
+                    // Logic: Reduce levels slowly.
+                    // Requirement: "when tank level reached 0L, simulation STOP"
+                    // Requirement: "when tank level below 3L, highlight... flashing" (Handled by :class binding)
+
+                    let anyEmpty = false;
+
+                    // Decrease each tank
+                    this.tanks.forEach(tank => {
+                        if (tank.level > 0) {
+                            tank.level = Math.max(0, tank.level - 0.05);
+                            this.mixedLevel += 0.05; // Accumulate in bottom tank
+                        }
+
+                        if (tank.level <= 0) {
+                            anyEmpty = true;
+                        }
+                    });
+
+                    // Stop if Mixed tank is full (30L)
+                    if (this.mixedLevel >= 30) {
+                        this.stopSimulation("Simulation Stopped: Mixed tank is full!");
+                        return;
+                    }
+
+                    if (anyEmpty) {
+                        this.stopSimulation("Simulation Stopped: One or more tanks are empty.");
+                    }
+                },
+
+                showMessage(msg, type) {
+                    this.message = msg;
+                    this.messageType = type;
+                    // Auto-hide error messages after 3 seconds
+                    if (type === 'error') {
+                        setTimeout(() => {
+                            if (this.message === msg) this.message = '';
+                        }, 3000);
+                    }
+                },
+
+                init() {
+                    // Start tanks at full capacity (10L)
+                    this.tanks.forEach(t => t.level = 10);
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>
