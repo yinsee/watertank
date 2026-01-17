@@ -261,6 +261,7 @@
         let turbine;
         let mainTankLiquid;
         const bubbles = [];
+        let streamMesh;
 
         // --- Helper: Create Cylinder with Gradient ---
         function createLiquid(radius, height, colorTop, colorBottom) {
@@ -410,6 +411,15 @@
         const dPipe2 = new THREE.Mesh(dPipe2Geo, pipeMaterial);
         dPipe2.position.set(0, -22, 0);
         scene.add(dPipe2);
+
+        // Fluid Stream
+        const streamGeo = new THREE.CylinderGeometry(CONFIG.pipeRadius * 0.6, CONFIG.pipeRadius * 0.6, 1, 8);
+        streamGeo.translate(0, -0.5, 0); // Pivot at top
+        const streamMat = new THREE.MeshBasicMaterial({ color: 0x6f42c1, transparent: true, opacity: 0.8 });
+        streamMesh = new THREE.Mesh(streamGeo, streamMat);
+        streamMesh.position.set(0, -27, 0); // Start at pipe bottom
+        streamMesh.visible = false;
+        scene.add(streamMesh);
 
         // 6. Main Tank
         const mainTankY = -40;
@@ -625,10 +635,24 @@
                 hPipe.material = pipeActiveMaterial;
                 dPipe.material = pipeActiveMaterial;
                 dPipe2.material = pipeActiveMaterial;
+
+                // Stream Logic
+                const pipeBottom = -27;
+                const tankBottom = -40 - CONFIG.mainTankHeight / 2; // -55
+                const currentLiquidHeight = (app.mixedLevel / 30) * CONFIG.mainTankHeight;
+                const currentSurfaceY = tankBottom + currentLiquidHeight;
+
+                if (currentSurfaceY < pipeBottom) {
+                    streamMesh.visible = true;
+                    streamMesh.scale.y = Math.max(0.1, pipeBottom - currentSurfaceY);
+                } else {
+                    streamMesh.visible = false;
+                }
             } else {
                 hPipe.material = pipeMaterial;
                 dPipe.material = pipeMaterial;
                 dPipe2.material = pipeMaterial;
+                streamMesh.visible = false;
             }
         }
 
